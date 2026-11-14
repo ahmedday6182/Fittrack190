@@ -1,1 +1,685 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>FitTrack 190 - GitHub API Sync</title>
+    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.5.1/dist/confetti.browser.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --primary: #2563eb;
+            --primary-dark: #1d4ed8;
+            --accent: #f59e0b;
+            --success: #10b981;
+            --bg: #0f172a;
+            --card-bg: #1e293b;
+            --card-border: #334155;
+            --text: #f8fafc;
+            --text-secondary: #94a3b8;
+            --danger: #ef4444;
+        }
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Plus Jakarta Sans', sans-serif; -webkit-tap-highlight-color: transparent; }
+        body { background-color: var(--bg); color: var(--text); min-height: 100vh; display: flex; flex-direction: column; padding-bottom: 90px; }
+        
+        /* Header */
+        header { background: rgba(30, 41, 59, 0.85); backdrop-filter: blur(10px); position: sticky; top: 0; z-index: 100; border-bottom: 1px solid var(--card-border); padding: 14px 20px; display: flex; justify-content: space-between; align-items: center; }
+        .logo { font-size: 1.2rem; font-weight: 800; color: #fff; display: flex; align-items: center; gap: 8px; }
+        .logo span { color: var(--primary); }
+        .header-actions { display: flex; gap: 8px; align-items: center; }
+        .sync-indicator { font-size: 0.75rem; padding: 4px 8px; border-radius: 8px; background: rgba(16,185,129,0.15); color: var(--success); border: 1px solid var(--success); font-weight: 600; display: none; }
+        .profile-btn { background: var(--card-border); border: none; color: var(--text); width: 40px; height: 40px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 1.2rem; cursor: pointer; transition: 0.2s; }
+        .profile-btn:hover { background: var(--primary); }
 
+        /* Main Container */
+        .container { max-width: 600px; margin: 0 auto; padding: 16px; width: 100%; flex: 1; }
+        .view { display: none; }
+        .view.active { display: block; animation: fadeIn 0.3s ease; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
+
+        /* Cards & UI */
+        .card { background: var(--card-bg); border: 1px solid var(--card-border); border-radius: 16px; padding: 18px; margin-bottom: 16px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.2); }
+        .card-title { font-size: 1rem; font-weight: 700; margin-bottom: 12px; display: flex; justify-content: space-between; align-items: center; }
+        
+        /* Accueil - KPI Grid */
+        .kpi-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 16px; }
+        .kpi-card { background: var(--card-bg); border: 1px solid var(--card-border); border-radius: 12px; padding: 12px 8px; text-align: center; }
+        .kpi-label { font-size: 0.7rem; color: var(--text-secondary); text-transform: uppercase; font-weight: 600; margin-bottom: 4px; }
+        .kpi-value { font-size: 1.1rem; font-weight: 800; color: #fff; }
+        .kpi-sub { font-size: 0.650rem; color: var(--success); margin-top: 2px; }
+
+        /* Countdown / Banner */
+        .banner { background: linear-gradient(135deg, #1e3a8a, #2563eb); border-radius: 14px; padding: 16px; margin-bottom: 16px; color: #fff; display: flex; justify-content: space-between; align-items: center; }
+        .banner-text h3 { font-size: 0.95rem; font-weight: 700; margin-bottom: 4px; }
+        .banner-text p { font-size: 0.8rem; opacity: 0.9; }
+        .banner-badge { background: rgba(255,255,255,0.2); padding: 8px 12px; border-radius: 10px; font-weight: 700; font-size: 0.85rem; text-align: center; }
+
+        /* Progress Bars */
+        .progress-box { margin-bottom: 12px; }
+        .progress-header { display: flex; justify-content: space-between; font-size: 0.8rem; font-weight: 600; margin-bottom: 6px; }
+        .progress-bar-bg { background: var(--card-border); height: 8px; border-radius: 4px; overflow: hidden; }
+        .progress-bar-fill { background: var(--primary); height: 100%; border-radius: 4px; transition: width 0.4s ease; }
+        .progress-bar-fill.success { background: var(--success); }
+        .progress-bar-fill.accent { background: var(--accent); }
+
+        /* Quick Actions */
+        .action-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 16px; }
+        .btn { background: var(--primary); color: #fff; border: none; border-radius: 12px; padding: 12px; font-weight: 700; font-size: 0.9rem; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px; transition: 0.2s; text-decoration: none; }
+        .btn:hover { background: var(--primary-dark); }
+        .btn-secondary { background: var(--card-border); color: var(--text); }
+        .btn-secondary:hover { background: #475569; }
+        .btn-success { background: var(--success); }
+        .btn-success:hover { background: #059669; }
+
+        /* Navigation Bar */
+        .nav-bar { position: fixed; bottom: 0; left: 0; right: 0; background: rgba(30, 41, 59, 0.95); backdrop-filter: blur(12px); border-top: 1px solid var(--card-border); display: flex; justify-content: space-around; padding: 10px 0; z-index: 100; }
+        .nav-item { background: none; border: none; color: var(--text-secondary); display: flex; flex-direction: column; align-items: center; gap: 4px; font-size: 0.75rem; font-weight: 600; cursor: pointer; transition: 0.2s; flex: 1; }
+        .nav-item span { font-size: 1.2rem; }
+        .nav-item.active { color: var(--primary); }
+
+        /* Workouts & Accordions */
+        .workout-tabs { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 8px; margin-bottom: 12px; }
+        .workout-tab-btn { background: var(--card-border); border: none; color: var(--text); padding: 8px 14px; border-radius: 10px; font-size: 0.8rem; font-weight: 700; cursor: pointer; white-space: nowrap; }
+        .workout-tab-btn.active { background: var(--primary); color: #fff; }
+
+        .exercise-card { background: #111827; border: 1px solid var(--card-border); border-radius: 12px; padding: 14px; margin-bottom: 10px; }
+        .exercise-name { font-size: 0.9rem; font-weight: 700; }
+        .exercise-tips { font-size: 0.75rem; color: var(--text-secondary); margin-bottom: 10px; line-height: 1.3; }
+        .sets-table { width: 100%; border-collapse: collapse; font-size: 0.8rem; }
+        .sets-table th { text-align: left; color: var(--text-secondary); padding-bottom: 4px; font-weight: 600; }
+        .sets-table td { padding: 4px 2px; }
+        .sets-table input { width: 100%; background: var(--card-bg); border: 1px solid var(--card-border); border-radius: 6px; color: #fff; padding: 6px; text-align: center; font-weight: 600; }
+
+        /* Timer Modal / Bar */
+        .timer-float { position: fixed; bottom: 75px; right: 16px; background: var(--primary); color: #fff; padding: 10px 16px; border-radius: 30px; font-weight: 800; font-size: 0.9rem; box-shadow: 0 4px 12px rgba(37,99,235,0.4); display: none; align-items: center; gap: 8px; z-index: 101; cursor: pointer; }
+
+        /* Nutrition Inputs */
+        .macro-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; margin-bottom: 12px; }
+        .input-group { margin-bottom: 10px; }
+        .input-group label { display: block; font-size: 0.75rem; font-weight: 600; color: var(--text-secondary); margin-bottom: 4px; }
+        .input-group input, .input-group select { width: 100%; background: #111827; border: 1px solid var(--card-border); border-radius: 8px; padding: 10px; color: #fff; font-size: 0.9rem; font-weight: 600; }
+
+        /* Modal Overlay */
+        .modal { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.8); z-index: 200; display: none; align-items: center; justify-content: center; padding: 20px; }
+        .modal-content { background: var(--card-bg); border: 1px solid var(--card-border); border-radius: 16px; width: 100%; max-width: 400px; padding: 20px; max-height: 90vh; overflow-y: auto; }
+        .modal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
+        .close-btn { background: none; border: none; color: var(--text-secondary); font-size: 1.2rem; cursor: pointer; }
+        
+        /* Tabs inside Profile Modal */
+        .profile-tabs { display: flex; gap: 8px; margin-bottom: 16px; border-bottom: 1px solid var(--card-border); padding-bottom: 8px; }
+        .profile-tab-btn { background: none; border: none; color: var(--text-secondary); font-size: 0.85rem; font-weight: 700; cursor: pointer; padding-bottom: 4px; }
+        .profile-tab-btn.active { color: var(--primary); border-bottom: 2px solid var(--primary); }
+        .profile-tab-pane { display: none; }
+        .profile-tab-pane.active { display: block; }
+    </style>
+</head>
+<body>
+
+    <header>
+        <div class="logo">⚡ FitTrack <span>190</span></div>
+        <div class="header-actions">
+            <div id="sync-status" class="sync-indicator">Synchronisé ☁️</div>
+            <button class="profile-btn" onclick="openProfileModal()">👤</button>
+        </div>
+    </header>
+
+    <div class="container">
+        <!-- VUE 1 : ACCUEIL -->
+        <div id="view-home" class="view active">
+            <div class="banner">
+                <div class="banner-text">
+                    <h3 id="banner-title">Phase 1 : Construction Propre</h3>
+                    <p id="banner-sub">Objectif : Remplir le haut du corps (2 650 kcal)</p>
+                </div>
+                <div class="banner-badge">
+                    <div style="font-size: 1.1rem; font-weight: 800;" id="days-to-summer">200j</div>
+                    <div style="font-size: 0.65rem; opacity: 0.8;">avant l'été</div>
+                </div>
+            </div>
+
+            <div class="kpi-grid">
+                <div class="kpi-card">
+                    <div class="kpi-label">Poids Actuel</div>
+                    <div class="kpi-value" id="kpi-weight">86.0 kg</div>
+                    <div class="kpi-sub" id="kpi-weight-diff">Cible 80kg</div>
+                </div>
+                <div class="kpi-card">
+                    <div class="kpi-label">Tour de Taille</div>
+                    <div class="kpi-value" id="kpi-waist">-- cm</div>
+                    <div class="kpi-sub">Cible &lt; 79cm</div>
+                </div>
+                <div class="kpi-card">
+                    <div class="kpi-label">Masse Grasse</div>
+                    <div class="kpi-value" id="kpi-bf">-- %</div>
+                    <div class="kpi-sub">US Navy</div>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-title">Objectifs Quotidiens</div>
+                <div class="progress-box">
+                    <div class="progress-header"><span>Calories & Protéines</span> <span id="cal-text">0 / 2650 kcal</span></div>
+                    <div class="progress-bar-bg"><div class="progress-bar-fill" id="cal-bar" style="width: 0%;"></div></div>
+                </div>
+                <div class="progress-box">
+                    <div class="progress-header"><span>Pas NEAT</span> <span id="steps-text">0 / 9 000 pas</span></div>
+                    <div class="progress-bar-bg"><div class="progress-bar-fill accent" id="steps-bar" style="width: 0%;"></div></div>
+                </div>
+                <div class="progress-box" style="margin-bottom:0;">
+                    <div class="progress-header"><span>Hydratation</span> <span id="water-text">0 / 2.8 L</span></div>
+                    <div class="progress-bar-bg"><div class="progress-bar-fill success" id="water-bar" style="width: 0%;"></div></div>
+                </div>
+            </div>
+
+            <div class="action-grid">
+                <button class="btn" onclick="switchTab('activites')">🏋️ Lancer une Séance</button>
+                <button class="btn btn-secondary" onclick="openQuickLog()">⚖️ Saisie Rapide</button>
+            </div>
+        </div>
+
+        <!-- VUE 2 : ACTIVITÉS -->
+        <div id="view-activites" class="view">
+            <div class="workout-tabs">
+                <button class="workout-tab-btn active" onclick="switchWorkout(0)">Séance 1 (Salle)</button>
+                <button class="workout-tab-btn" onclick="switchWorkout(1)">Séance 2 (Salle)</button>
+                <button class="workout-tab-btn" onclick="switchWorkout(2)">Séance 3 (Salle)</button>
+                <button class="workout-tab-btn" onclick="switchWorkout(3)">Séance 4 (Maison)</button>
+            </div>
+            <div id="workout-container"></div>
+        </div>
+
+        <!-- VUE 3 : NUTRITION -->
+        <div id="view-nutrition" class="view">
+            <div class="card">
+                <div class="card-title">Suivi du Jour</div>
+                <div class="macro-grid">
+                    <div class="input-group">
+                        <label>Calories (kcal)</label>
+                        <input type="number" id="input-cals" placeholder="2650">
+                    </div>
+                    <div class="input-group">
+                        <label>Protéines (g)</label>
+                        <input type="number" id="input-prots" placeholder="170">
+                    </div>
+                    <div class="input-group">
+                        <label>Eau (L)</label>
+                        <input type="number" step="0.1" id="input-water" placeholder="2.5">
+                    </div>
+                    <div class="input-group">
+                        <label>Pas du jour</label>
+                        <input type="number" id="input-steps" placeholder="8500">
+                    </div>
+                </div>
+                <button class="btn" onclick="saveDailyLog()">Enregistrer la journée</button>
+            </div>
+            <div class="card">
+                <div class="card-title">Repas Rapides</div>
+                <div style="display: flex; flex-direction: column; gap: 8px;">
+                    <button class="btn btn-secondary" style="justify-content: flex-start;" onclick="quickMeal(600, 45, 'Petit-déjeuner (Oeufs + Flocons)')">🍳 Petit-déjeuner (600 kcal / 45g P)</button>
+                    <button class="btn btn-secondary" style="justify-content: flex-start;" onclick="quickMeal(800, 60, 'Déjeuner (Poulet + Riz + Légumes)')">🍗 Déjeuner (800 kcal / 60g P)</button>
+                    <button class="btn btn-secondary" style="justify-content: flex-start;" onclick="quickMeal(400, 35, 'Collation (Whey + Banane + Amandes)')">🍌 Collation (400 kcal / 35g P)</button>
+                    <button class="btn btn-secondary" style="justify-content: flex-start;" onclick="quickMeal(850, 55, 'Dîner (Poisson + Patate douce)')">🐟 Dîner (850 kcal / 55g P)</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- CHRONO FLOTTANT -->
+    <div id="timer-float" class="timer-float" onclick="toggleTimerModal()">
+        ⏱️ <span id="timer-display">02:00</span>
+    </div>
+
+    <!-- MODAL PROFIL & SYNCHRONISATION -->
+    <div id="profile-modal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Mon Profil & Paramètres</h3>
+                <button class="close-btn" onclick="closeProfileModal()">✕</button>
+            </div>
+
+            <!-- Onglets du Profil -->
+            <div class="profile-tabs">
+                <button class="profile-tab-btn active" onclick="switchProfileTab('infos', this)">👤 Mes Infos</button>
+                <button class="profile-tab-btn" onclick="switchProfileTab('sync', this)">🔄 Synchronisation</button>
+            </div>
+
+            <!-- Pane : Mes Infos -->
+            <div id="ptab-infos" class="profile-tab-pane active">
+                <div class="input-group">
+                    <label>Phase Stratégique</label>
+                    <select id="profile-phase" onchange="updatePhaseSetting()">
+                        <option value="1">Phase 1 : Construction Propre (2 650 kcal)</option>
+                        <option value="2">Phase 2 : Sèche Progressive (2 200 kcal)</option>
+                    </select>
+                </div>
+                <div class="input-group">
+                    <label>Poids Actuel (kg)</label>
+                    <input type="number" step="0.1" id="profile-weight" value="86">
+                </div>
+                <div class="input-group">
+                    <label>Tour de Taille (cm)</label>
+                    <input type="number" step="0.5" id="profile-waist-input" placeholder="85">
+                </div>
+                <div class="input-group">
+                    <label>Tour de Cou (cm)</label>
+                    <input type="number" step="0.5" id="profile-neck" value="38">
+                </div>
+                <button class="btn" onclick="saveProfileData()">Mettre à jour le profil</button>
+            </div>
+
+            <!-- Pane : Synchronisation GitHub -->
+            <div id="ptab-sync" class="profile-tab-pane">
+                <div style="font-size: 0.8rem; color: var(--text-secondary); margin-bottom: 12px; line-height: 1.4;">
+                    Tes données sont automatiquement enregistrées et synchronisées dans ton fichier JSON sur GitHub en arrière-plan à chaque modification.
+                </div>
+                <div class="input-group">
+                    <label>Nom d'utilisateur GitHub (Owner)</label>
+                    <input type="text" id="gh-owner" placeholder="ex: ton-pseudo">
+                </div>
+                <div class="input-group">
+                    <label>Nom du Dépôt (Repo)</label>
+                    <input type="text" id="gh-repo" placeholder="ex: fittrack-190">
+                </div>
+                <div class="input-group">
+                    <label>Token Personnel GitHub (PAT)</label>
+                    <input type="password" id="gh-token" placeholder="ghp_xxxxxxxxxxxx">
+                </div>
+                <button class="btn btn-success" onclick="saveGitHubConfig()">Enregistrer & Tester la Sync</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL SAISIE RAPIDE -->
+    <div id="quicklog-modal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Saisie Rapide (Poids / Taille)</h3>
+                <button class="close-btn" onclick="closeQuickLog()">✕</button>
+            </div>
+            <div class="input-group">
+                <label>Poids du jour (kg)</label>
+                <input type="number" step="0.1" id="quick-weight" placeholder="86.0">
+            </div>
+            <div class="input-group">
+                <label>Tour de taille du jour (cm)</label>
+                <input type="number" step="0.5" id="quick-waist" placeholder="84.0">
+            </div>
+            <button class="btn" onclick="saveQuickLog()">Valider</button>
+        </div>
+    </div>
+
+    <!-- NAVIGATION INFERIEURE -->
+    <nav class="nav-bar">
+        <button class="nav-item active" onclick="switchTab('home')" id="nav-home">
+            <span>🏠</span> Accueil
+        </button>
+        <button class="nav-item" onclick="switchTab('activites')" id="nav-activites">
+            <span>🏋️</span> Activités
+        </button>
+        <button class="nav-item" onclick="switchTab('nutrition')" id="nav-nutrition">
+            <span>🥗</span> Nutrition
+        </button>
+    </nav>
+
+    <script>
+        let state = {
+            phase: 1,
+            weight: 86.0,
+            waist: 85.0,
+            neck: 38.0,
+            cals: 0,
+            prots: 0,
+            water: 0,
+            steps: 0,
+            workoutsData: {}
+        };
+
+        let ghConfig = {
+            owner: localStorage.getItem('gh_owner') || '',
+            repo: localStorage.getItem('gh_repo') || '',
+            token: localStorage.getItem('gh_token') || '',
+            path: 'data.json'
+        };
+        let fileSha = null;
+        let isSyncing = false;
+
+        const workouts = [
+            {
+                title: "Séance 1 — Pectoraux, Épaules & Triceps (Salle)",
+                exercises: [
+                    { name: "Développé incliné aux haltères (30°)", sets: 4, reps: "8-10", tips: "Garde les coudes rentrés à 45° pour préserver tes épaules à 1m90." },
+                    { name: "Élévations latérales aux haltères", sets: 4, reps: "12-15", tips: "Mouvement fluide, pauses en bas, accent sur le faisceau latéral." },
+                    { name: "Développé épaules assis haltères", sets: 3, reps: "8-10", tips: "Prise neutre pour éviter les tensions sur la coiffe des rotateurs." },
+                    { name: "Écartés à la poulie vis-à-vis", sets: 3, reps: "12-15", tips: "Serre fort en haut, amplitude complète." },
+                    { name: "Extensions triceps poulie haute (corde)", sets: 3, reps: "10-12", tips: "Coudes fixes le long du corps." }
+                ]
+            },
+            {
+                title: "Séance 2 — Bas du corps & Abdos (Salle)",
+                exercises: [
+                    { name: "Presse à cuisses inclinée", sets: 4, reps: "8-10", tips: "Idéal pour 1m90 sans charger le bas du dos." },
+                    { name: "Soulevé de terre roumain haltères", sets: 3, reps: "8-10", tips: "Garde le dos bien droit, fléchis légèrement les genoux." },
+                    { name: "Leg curl assis ou allongé", sets: 3, reps: "10-12", tips: "Contrôle la phase excentrique." },
+                    { name: "Crunch à la poulie haute (lesté)", sets: 4, reps: "10-15", tips: "Enroule le dos sur chaque répétition." },
+                    { name: "Relevés de jambes suspendu", sets: 3, reps: "10-15", tips: "Évite le balancement, monte les genoux à la poitrine." }
+                ]
+            },
+            {
+                title: "Séance 3 — Dos, Arrière d'épaule & Biceps (Salle)",
+                exercises: [
+                    { name: "Tirage vertical prise large", sets: 4, reps: "8-10", tips: "Tire avec les coudes vers les hanches." },
+                    { name: "Rowing poulie basse (dos)", sets: 4, reps: "8-10", tips: "Poitrine sortie, contracte les omoplates." },
+                    { name: "Oiseau poulie vis-à-vis", sets: 4, reps: "12-15", tips: "Cible l'arrière d'épaule pour l'harmonie de profil." },
+                    { name: "Curl incliné aux haltères", sets: 3, reps: "10-12", tips: "Laisse bien étirer les bras en bas." },
+                    { name: "Élévations latérales poulie (unilatéral)", sets: 3, reps: "12-15", tension: "Tension continue sur tout le mouvement." }
+                ]
+            },
+            {
+                title: "Séance 4 — Rappel Haut, Gainage & Jambes (Maison/Salle)",
+                exercises: [
+                    { name: "Fentes bulgares avec haltères", sets: 3, reps: "10 / jambe", tips: "Buste légèrement incliné vers l'avant." },
+                    { name: "Pompes pieds surélevés ou Dips", sets: 3, reps: "Max propre", tips: "Excellente amplitude pour le haut des pecs." },
+                    { name: "Rowing unilatéral haltère", sets: 3, reps: "10-12", tips: "Appui sur banc ou chaise." },
+                    { name: "Face pull (élastique ou poulie)", sets: 3, reps: "15", tips: "Parfait pour la posture des grands gabarits." },
+                    { name: "Roulette abdominale (Ab wheel)", sets: 3, reps: "10-12", tips: "Gainage maximal du bassin." }
+                ]
+            }
+        ];
+
+        let currentWorkoutIdx = 0;
+        let timerInterval = null;
+        let secondsRemaining = 120;
+
+        async function initApp() {
+            document.getElementById('profile-phase').value = state.phase;
+            document.getElementById('profile-weight').value = state.weight;
+            document.getElementById('profile-waist-input').value = state.waist;
+            document.getElementById('profile-neck').value = state.neck;
+            document.getElementById('gh-owner').value = ghConfig.owner;
+            document.getElementById('gh-repo').value = ghConfig.repo;
+            document.getElementById('gh-token').value = ghConfig.token;
+
+            if (ghConfig.token && ghConfig.owner && ghConfig.repo) {
+                await loadFromGitHub();
+            } else {
+                renderHome();
+                renderWorkouts();
+            }
+            updateTimerDisplay();
+        }
+
+        async function loadFromGitHub() {
+            showSyncStatus('Chargement...', 'accent');
+            const url = `https://api.github.com/repos/${ghConfig.owner}/${ghConfig.repo}/contents/${ghConfig.path}`;
+            try {
+                const res = await fetch(url, {
+                    headers: { 'Authorization': `token ${ghConfig.token}` }
+                });
+                if (res.ok) {
+                    const json = await res.json();
+                    fileSha = json.sha;
+                    const decoded = JSON.parse(decodeURIComponent(escape(atob(json.content))));
+                    state = decoded;
+                    showSyncStatus('Synchronisé ☁️', 'success');
+                } else {
+                    showSyncStatus('Création auto fichier distant', 'accent');
+                    await saveToGitHub();
+                }
+            } catch (e) {
+                showSyncStatus('Erreur connexion GitHub', 'danger');
+            }
+            renderHome();
+            renderWorkouts();
+        }
+
+        async function saveToGitHub() {
+            if (!ghConfig.token || !ghConfig.owner || !ghConfig.repo) return;
+            if (isSyncing) return;
+            isSyncing = true;
+            showSyncStatus('Sauvegarde ☁️...', 'accent');
+
+            const url = `https://api.github.com/repos/${ghConfig.owner}/${ghConfig.repo}/contents/${ghConfig.path}`;
+            
+            if (!fileSha) {
+                try {
+                    const getRes = await fetch(url, {
+                        headers: { 'Authorization': `token ${ghConfig.token}` }
+                    });
+                    if (getRes.ok) {
+                        const getJson = await getRes.json();
+                        fileSha = getJson.sha;
+                    }
+                } catch(e) {}
+            }
+
+            const contentBase64 = btoa(unescape(encodeURIComponent(JSON.stringify(state, null, 2))));
+            const body = {
+                message: "Auto-sync FitTrack 190 data",
+                content: contentBase64,
+                sha: fileSha || undefined
+            };
+
+            try {
+                const res = await fetch(url, {
+                    method: 'PUT',
+                    headers: {
+                        'Authorization': `token ${ghConfig.token}`,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(body)
+                });
+                if (res.ok) {
+                    const json = await res.json();
+                    fileSha = json.content.sha;
+                    showSyncStatus('Synchronisé ☁️', 'success');
+                } else {
+                    showSyncStatus('Erreur sync GitHub', 'danger');
+                }
+            } catch (e) {
+                showSyncStatus('Erreur réseau', 'danger');
+            }
+            isSyncing = false;
+        }
+
+        function showSyncStatus(text, type) {
+            const el = document.getElementById('sync-status');
+            el.style.display = 'block';
+            el.innerText = text;
+            if (type === 'success') {
+                el.style.color = 'var(--success)';
+                el.style.borderColor = 'var(--success)';
+                el.style.background = 'rgba(16,185,129,0.15)';
+            } else if (type === 'accent') {
+                el.style.color = 'var(--accent)';
+                el.style.borderColor = 'var(--accent)';
+                el.style.background = 'rgba(245,158,11,0.15)';
+            } else {
+                el.style.color = 'var(--danger)';
+                el.style.borderColor = 'var(--danger)';
+                el.style.background = 'rgba(239,68,68,0.15)';
+            }
+        }
+
+        function switchTab(tabId) {
+            document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+            document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+            document.getElementById('view-' + tabId).classList.add('active');
+            document.getElementById('nav-' + tabId).classList.add('active');
+            window.scrollTo(0, 0);
+        }
+
+        function switchProfileTab(tabName, btn) {
+            document.querySelectorAll('.profile-tab-pane').forEach(p => p.classList.remove('active'));
+            document.querySelectorAll('.profile-tab-btn').forEach(b => b.classList.remove('active'));
+            document.getElementById('ptab-' + tabName).classList.add('active');
+            btn.classList.add('active');
+        }
+
+        function renderHome() {
+            const maxCals = state.phase === 1 ? 2650 : 2200;
+            const maxSteps = 9000;
+            const maxWater = 2.8;
+
+            document.getElementById('banner-title').innerText = state.phase === 1 ? "Phase 1 : Construction Propre" : "Phase 2 : Sèche Progressive";
+            document.getElementById('banner-sub').innerText = state.phase === 1 ? "Objectif : Remplir le haut du corps (2 650 kcal)" : "Objectif : Révéler les abdos (2 200 kcal)";
+            
+            document.getElementById('kpi-weight').innerText = state.weight.toFixed(1) + ' kg';
+            document.getElementById('kpi-waist').innerText = (state.waist ? state.waist + ' cm' : '-- cm');
+            
+            if(state.waist && state.neck) {
+                let bf = 86.010 * Math.log10(state.waist - state.neck) - 70.041 * Math.log10(190) + 36.76;
+                document.getElementById('kpi-bf').innerText = Math.max(8, bf.toFixed(1)) + ' %';
+            }
+
+            document.getElementById('cal-text').innerText = `${state.cals} / ${maxCals} kcal`;
+            document.getElementById('cal-bar').style.width = Math.min(100, (state.cals / maxCals) * 100) + '%';
+
+            document.getElementById('steps-text').innerText = `${state.steps} / ${maxSteps} pas`;
+            document.getElementById('steps-bar').style.width = Math.min(100, (state.steps / maxSteps) * 100) + '%';
+
+            document.getElementById('water-text').innerText = `${state.water} / ${maxWater} L`;
+            document.getElementById('water-bar').style.width = Math.min(100, (state.water / maxWater) * 100) + '%';
+        }
+
+        function renderWorkouts() {
+            const container = document.getElementById('workout-container');
+            const w = workouts[currentWorkoutIdx];
+            
+            let html = `<div class="card"><h3 style="font-size:1.05rem; margin-bottom:14px;">${w.title}</h3>`;
+            
+            w.exercises.forEach((ex, exIdx) => {
+                html += `
+                    <div class="exercise-card">
+                        <div class="exercise-name">${ex.name}</div>
+                        <div class="exercise-tips">💡 ${ex.tips}</div>
+                        <table class="sets-table">
+                            <tr><th>Série</th><th>Poids (kg)</th><th>Reps</th><th>Action</th></tr>`;
+                
+                for(let s = 1; s <= ex.sets; s++) {
+                    let key = `${currentWorkoutIdx}_${exIdx}_${s}`;
+                    let savedData = (state.workoutsData && state.workoutsData[key]) || {w: '', r: ''};
+                    html += `
+                        <tr>
+                            <td>#${s}</td>
+                            <td><input type="number" step="0.5" placeholder="kg" value="${savedData.w}" onchange="saveSetData(${currentWorkoutIdx}, ${exIdx}, ${s}, this, 'w')"></td>
+                            <td><input type="number" placeholder="${ex.reps}" value="${savedData.r}" onchange="saveSetData(${currentWorkoutIdx}, ${exIdx}, ${s}, this, 'r')"></td>
+                            <td><button class="btn" style="padding:6px; font-size:0.75rem;" onclick="startTimer(120)">⏱️</button></td>
+                        </tr>`;
+                }
+                html += `</table></div>`;
+            });
+            html += `</div>`;
+            container.innerHTML = html;
+        }
+
+        function switchWorkout(idx) {
+            currentWorkoutIdx = idx;
+            document.querySelectorAll('.workout-tab-btn').forEach((btn, i) => {
+                btn.classList.toggle('active', i === idx);
+            });
+            renderWorkouts();
+        }
+
+        function saveSetData(wIdx, exIdx, setNum, el, type) {
+            let key = `${wIdx}_${exIdx}_${setNum}`;
+            if(!state.workoutsData) state.workoutsData = {};
+            if(!state.workoutsData[key]) state.workoutsData[key] = {w:'', r:''};
+            state.workoutsData[key][type] = el.value;
+            saveToGitHub();
+        }
+
+        function startTimer(seconds) {
+            secondsRemaining = seconds;
+            document.getElementById('timer-float').style.display = 'flex';
+            if(timerInterval) clearInterval(timerInterval);
+            timerInterval = setInterval(() => {
+                secondsRemaining--;
+                updateTimerDisplay();
+                if(secondsRemaining <= 0) {
+                    clearInterval(timerInterval);
+                    document.getElementById('timer-float').style.display = 'none';
+                    if(typeof confetti === 'function') confetti();
+                }
+            }, 1000);
+        }
+
+        function updateTimerDisplay() {
+            let m = Math.floor(secondsRemaining / 60);
+            let s = secondsRemaining % 60;
+            document.getElementById('timer-display').innerText = `${m.toString().padStart(2,'0')}:${s.toString().padStart(2,'0')}`;
+        }
+
+        function toggleTimerModal() {
+            if(secondsRemaining <= 0) document.getElementById('timer-float').style.display = 'none';
+        }
+
+        function saveDailyLog() {
+            state.cals = parseInt(document.getElementById('input-cals').value) || state.cals;
+            state.prots = parseInt(document.getElementById('input-prots').value) || state.prots;
+            state.water = parseFloat(document.getElementById('input-water').value) || state.water;
+            state.steps = parseInt(document.getElementById('input-steps').value) || state.steps;
+            renderHome();
+            saveToGitHub();
+            alert("Journée enregistrée et synchronisée sur GitHub en arrière-plan !");
+            switchTab('home');
+        }
+
+        function quickMeal(cals, prots, name) {
+            state.cals += cals;
+            state.prots += prots;
+            renderHome();
+            saveToGitHub();
+            alert(`Ajouté : ${name} (+${cals} kcal, +${prots}g P)`);
+        }
+
+        function openProfileModal() { document.getElementById('profile-modal').style.display = 'flex'; }
+        function closeProfileModal() { document.getElementById('profile-modal').style.display = 'none'; }
+
+        function openQuickLog() { document.getElementById('quicklog-modal').style.display = 'flex'; }
+        function closeQuickLog() { document.getElementById('quicklog-modal').style.display = 'none'; }
+
+        function updatePhaseSetting() {
+            state.phase = parseInt(document.getElementById('profile-phase').value);
+            renderHome();
+            saveToGitHub();
+        }
+
+        function saveProfileData() {
+            state.weight = parseFloat(document.getElementById('profile-weight').value) || state.weight;
+            state.waist = parseFloat(document.getElementById('profile-waist-input').value) || state.waist;
+            state.neck = parseFloat(document.getElementById('profile-neck').value) || state.neck;
+            renderHome();
+            closeProfileModal();
+            saveToGitHub();
+            alert("Profil mis à jour et synchronisé !");
+        }
+
+        async function saveGitHubConfig() {
+            ghConfig.owner = document.getElementById('gh-owner').value.trim();
+            ghConfig.repo = document.getElementById('gh-repo').value.trim();
+            ghConfig.token = document.getElementById('gh-token').value.trim();
+
+            localStorage.setItem('gh_owner', ghConfig.owner);
+            localStorage.setItem('gh_repo', ghConfig.repo);
+            localStorage.setItem('gh_token', ghConfig.token);
+
+            closeProfileModal();
+            await loadFromGitHub();
+            alert("Configuration GitHub enregistrée et synchronisation testée !");
+        }
+
+        async function saveQuickLog() {
+            let w = parseFloat(document.getElementById('quick-weight').value);
+            let waist = parseFloat(document.getElementById('quick-waist').value);
+            if(w) state.weight = w;
+            if(waist) state.waist = waist;
+            renderHome();
+            closeQuickLog();
+            await saveToGitHub();
+            alert("Données du jour enregistrées et poussées sur GitHub !");
+        }
+
+        window.onload = initApp;
+    </script>
+</body>
+</html>
